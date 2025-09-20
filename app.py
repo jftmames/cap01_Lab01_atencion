@@ -1,11 +1,6 @@
-# app.py
-# Laboratorio 1: Visualizando el Mecanismo de Atención
-# Libro IA LABS
+# app.py (Versión "Todo en Uno")
 
 # --- Importaciones Esenciales ---
-# Importamos las librerías necesarias.
-# streamlit para la interfaz web, transformers para el modelo, torch es el backend,
-# y matplotlib/seaborn para la visualización.
 import streamlit as st
 import torch
 from transformers import AutoTokenizer, AutoModel
@@ -13,7 +8,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # --- Configuración de la Página ---
-# Damos un título y un ícono a nuestra página en el navegador.
 st.set_page_config(
     page_title="Visor de Atención",
     page_icon="🧠",
@@ -21,86 +15,94 @@ st.set_page_config(
 )
 
 # --- Carga del Modelo (con Caché) ---
-# Esta función carga el tokenizer y el modelo.
-# Usamos el decorador @st.cache_resource de Streamlit para que esta operación
-# (que es muy lenta) solo se ejecute una vez, la primera vez que se carga la app.
-# Las siguientes veces, usará la versión en caché, haciendo la app mucho más rápida.
 @st.cache_resource
 def load_model():
     """Carga el modelo y el tokenizer de Hugging Face."""
-    # Usaremos 'bert-base-uncased', un modelo estándar y versátil.
-    # 'output_attentions=True' es CRÍTICO. Le dice al modelo que nos devuelva
-    # los pesos de atención además de la salida normal.
     tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
     model = AutoModel.from_pretrained('bert-base-uncased', output_attentions=True)
     return tokenizer, model
 
-# --- Título y Descripción de la App ---
-st.title("🔬 Visor del Mecanismo de Atención en Transformers")
-st.write(
-    "Esta aplicación te permite ver cómo funciona el mecanismo de 'atención' dentro de un modelo Transformer (BERT). "
-    "Introduce una frase y observa qué palabras le 'prestan atención' a otras para construir su significado contextual."
-)
+# --- Título Principal ---
+st.title("🔬 Visor del Mecanismo de Atención y Guía")
 
-# --- Carga de los modelos ---
-# Llamamos a nuestra función para tener el tokenizer y el modelo listos.
-# Streamlit mostrará un spinner mientras esta operación se completa.
-with st.spinner("Cargando modelo pre-entrenado..."):
-    tokenizer, model = load_model()
+# --- Creación de las Pestañas ---
+# st.tabs crea un contenedor con pestañas. Cada bloque 'with' corresponde a una pestaña.
+tab1, tab2 = st.tabs(["Visor de Atención", "📖 Guía de Ejemplos"])
 
-# --- Interfaz de Usuario ---
-st.header("Introduce tu frase")
-# Usamos un text_area para que el usuario pueda escribir su texto.
-# Le damos una frase de ejemplo para guiarlo.
-user_input = st.text_area(
-    "Texto a analizar:",
-    "The quick brown fox jumps over the lazy dog.",
-    height=100
-)
 
-# Creamos columnas para poner los selectores de capa y cabeza uno al lado del otro.
-col1, col2 = st.columns(2)
-# Creamos un slider para que el usuario elija qué capa de atención visualizar.
-# BERT-base tiene 12 capas (de 0 a 11).
-layer_to_visualize = col1.slider("Capa de Atención a Visualizar", 0, 11, 6)
-# Y otro para la cabeza de atención. BERT-base tiene 12 cabezas (de 0 a 11).
-head_to_visualize = col2.slider("Cabeza de Atención a Visualizar", 0, 11, 0)
+# --- Contenido de la Pestaña 1: Visor de Atención ---
+with tab1:
+    st.header("Visualizador Interactivo de Atención")
+    st.write(
+        "Esta aplicación te permite ver cómo funciona el mecanismo de 'atención' dentro de un modelo Transformer (BERT). "
+        "Introduce una frase y observa qué palabras le 'prestan atención' a otras para construir su significado contextual."
+    )
 
-# El botón que iniciará el análisis.
-if st.button("Visualizar Atención"):
-    if user_input:
-        # --- Procesamiento del Modelo ---
-        # 1. Tokenización: Convertimos el texto en tokens que el modelo entiende.
-        inputs = tokenizer(user_input, return_tensors='pt', add_special_tokens=True)
-        token_list = tokenizer.convert_ids_to_tokens(inputs['input_ids'][0])
+    with st.spinner("Cargando modelo pre-entrenado..."):
+        tokenizer, model = load_model()
 
-        # 2. Inferencia: Pasamos los tokens por el modelo.
-        # 'torch.no_grad()' desactiva el cálculo de gradientes, lo que acelera
-        # la inferencia ya que no estamos entrenando el modelo.
-        with torch.no_grad():
-            outputs = model(**inputs)
+    st.subheader("Introduce tu frase")
+    user_input = st.text_area(
+        "Texto a analizar:",
+        "The quick brown fox jumps over the lazy dog.",
+        height=100,
+        key="main_input" # Se añade una 'key' para diferenciarlo de otros text_area
+    )
 
-        # 3. Extracción de Atención:
-        # Los pesos de atención están en 'outputs.attentions'.
-        # Es una tupla con las matrices de atención de cada capa.
-        # Seleccionamos la capa y la cabeza que el usuario eligió.
-        attention_matrix = outputs.attentions[layer_to_visualize][0, head_to_visualize].numpy()
+    col1, col2 = st.columns(2)
+    layer_to_visualize = col1.slider("Capa de Atención a Visualizar", 0, 11, 6)
+    head_to_visualize = col2.slider("Cabeza de Atención a Visualizar", 0, 11, 0)
 
-        # --- Visualización del Heatmap ---
-        st.header(f"Mapa de Calor de Atención (Capa {layer_to_visualize}, Cabeza {head_to_visualize})")
-        st.write(
-            "Este mapa muestra la puntuación de atención de cada palabra (eje Y) hacia cada otra palabra (eje X). "
-            "Un color más brillante significa una puntuación de atención más alta."
-        )
+    if st.button("Visualizar Atención"):
+        if user_input:
+            inputs = tokenizer(user_input, return_tensors='pt', add_special_tokens=True)
+            token_list = tokenizer.convert_ids_to_tokens(inputs['input_ids'][0])
 
-        # Usamos matplotlib y seaborn para crear el gráfico.
-        fig, ax = plt.subplots(figsize=(10, 8))
-        sns.heatmap(attention_matrix, xticklabels=token_list, yticklabels=token_list, cmap='viridis', ax=ax)
-        plt.xticks(rotation=45) # Rotamos las etiquetas para que no se superpongan.
-        ax.set_xlabel("Palabra a la que se 'presta atención' (Key)")
-        ax.set_ylabel("Palabra que 'presta atención' (Query)")
+            with torch.no_grad():
+                outputs = model(**inputs)
 
-        # Mostramos el gráfico en Streamlit.
-        st.pyplot(fig)
-    else:
-        st.warning("Por favor, introduce una frase para analizar.")
+            attention_matrix = outputs.attentions[layer_to_visualize][0, head_to_visualize].numpy()
+
+            st.subheader(f"Mapa de Calor de Atención (Capa {layer_to_visualize}, Cabeza {head_to_visualize})")
+            st.write(
+                "Este mapa muestra la puntuación de atención de cada palabra (eje Y) hacia cada otra palabra (eje X). "
+                "Un color más brillante significa una puntuación de atención más alta."
+            )
+
+            fig, ax = plt.subplots(figsize=(10, 8))
+            sns.heatmap(attention_matrix, xticklabels=token_list, yticklabels=token_list, cmap='viridis', ax=ax)
+            plt.xticks(rotation=45)
+            ax.set_xlabel("Palabra a la que se 'presta atención' (Key)")
+            ax.set_ylabel("Palabra que 'presta atención' (Query)")
+
+            st.pyplot(fig)
+        else:
+            st.warning("Por favor, introduce una frase para analizar.")
+
+
+# --- Contenido de la Pestaña 2: Guía de Ejemplos ---
+with tab2:
+    st.header("Guía de Ejemplos para el Visor de Atención")
+    st.markdown(
+        """
+        Esta guía proporciona varios ejemplos para probar en el **Visor de Atención**. 
+        Cada ejemplo está diseñado para revelar un aspecto diferente de cómo el mecanismo 
+        de atención de un Transformer interpreta el lenguaje.
+        """
+    )
+    st.divider()
+
+    st.subheader("1. Resolución de Pronombres", anchor=False)
+    st.markdown("Muestra si el modelo vincula un pronombre (como 'it') al sustantivo al que se refiere.")
+    st.code("The robot picked up the ball because it was heavy.", language="text")
+    st.info("**Qué esperar:** En la fila de `it`, busca un color brillante en la columna de `ball`.")
+
+    st.subheader("2. Relación Sujeto-Verbo-Objeto", anchor=False)
+    st.markdown("Revela cómo la acción (verbo) se conecta con quien la realiza (sujeto) y quien la recibe (objeto).")
+    st.code("The programmer wrote the code.", language="text")
+    st.info("**Qué esperar:** En la fila de `wrote`, busca colores brillantes en las columnas de `programmer` y `code`.")
+    
+    st.subheader("3. Dependencias a Larga Distancia", anchor=False)
+    st.markdown("Prueba la capacidad del Transformer para conectar palabras que están muy separadas.")
+    st.code("The dog that chased the cat across the yard finally took a nap.", language="text")
+    st.info("**Qué esperar:** En la fila de `nap` (o `took`), busca un color brillante en la columna de `dog`.")
